@@ -3,6 +3,12 @@ FROM python:3.12-slim
 # 设置工作目录
 WORKDIR /app
 
+# 安装编译工具和依赖
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # 安装p115nano302和所需依赖
 RUN pip install -U p115nano302 flask
 

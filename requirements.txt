@@ -1,1 +1,8 @@
- 
+fastapi
+uvicorn
+jinja2
+aiofiles
+python-multipart
+orjson
+rich>=13.7.0
+p115nano302>=0.0.9

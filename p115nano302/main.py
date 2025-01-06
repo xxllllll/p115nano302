@@ -69,14 +69,24 @@ class LogManager:
             console.print(f"[timestamp]{log_entry['timestamp']}[/] [{level}]{message}[/]")
             
             # 广播到所有连接的WebSocket客户端
-            await self.broadcast(log_entry)
+            if self.connected_clients:
+                await self.broadcast(log_entry)
+            else:
+                console.print("[warning]没有连接的WebSocket客户端[/]")
 
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.connected_clients.append(websocket)
-        # 发送现有日志
-        for log in self.logs:
-            await websocket.send_json(log)
+        try:
+            await websocket.accept()
+            self.connected_clients.append(websocket)
+            console.print(f"[info]新的WebSocket客户端连接，当前连接数: {len(self.connected_clients)}[/]")
+            # 发送现有日志
+            for log in self.logs:
+                try:
+                    await websocket.send_json(log)
+                except Exception as e:
+                    console.print(f"[error]发送历史日志失败: {str(e)}[/]")
+        except Exception as e:
+            console.print(f"[error]WebSocket连接失败: {str(e)}[/]")
 
     async def disconnect(self, websocket: WebSocket):
         try:
@@ -87,8 +97,12 @@ class LogManager:
             pass
 
     async def broadcast(self, log_entry: dict):
+        if not self.connected_clients:
+            return
+
         disconnected_clients = []
-        console.print(f"[debug]准备广播日志: {log_entry}[/]")
+        console.print(f"[debug]准备广播日志到 {len(self.connected_clients)} 个客户端[/]")
+        
         for client in self.connected_clients:
             try:
                 await asyncio.wait_for(client.send_json(log_entry), timeout=1.0)
@@ -99,10 +113,12 @@ class LogManager:
         
         # 移除断开的客户端
         for client in disconnected_clients:
-            try:
-                await self.disconnect(client)
-            except:
-                pass
+            if client in self.connected_clients:
+                self.connected_clients.remove(client)
+                try:
+                    await client.close()
+                except:
+                    pass
 
 # 创建日志管理器实例
 log_manager = LogManager()
@@ -110,22 +126,29 @@ log_manager = LogManager()
 # WebSocket路由
 @app.websocket("/ws/logs")
 async def websocket_endpoint(websocket: WebSocket):
+    console.print("[info]收到新的WebSocket连接请求[/]")
     await log_manager.connect(websocket)
     try:
         while True:
             try:
                 # 每5秒发送一次心跳
-                await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+                if data == 'pong':
+                    continue
             except asyncio.TimeoutError:
                 try:
                     # 发送心跳
                     await websocket.send_text('ping')
                 except:
+                    console.print("[warning]心跳发送失败，关闭连接[/]")
                     break
-            except:
+            except Exception as e:
+                console.print(f"[error]WebSocket错误: {str(e)}[/]")
                 break
     finally:
-        await log_manager.disconnect(websocket)
+        console.print("[info]WebSocket连接关闭[/]")
+        if websocket in log_manager.connected_clients:
+            log_manager.connected_clients.remove(websocket)
 
 # 路由处理
 @app.get("/")
@@ -152,7 +175,7 @@ class UvicornLogFilter(logging.Filter):
             # 处理302请求日志
             if ' 302 Found' in msg:
                 try:
-                    # 使用更宽松的正则表达式来匹配302日志
+                    console.print(f"[debug]收到302日志: {msg}[/]")  # 添加调试日志
                     if 'pickcode=' in msg:
                         # 提取IP地址
                         ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+):\d+', msg)
@@ -166,12 +189,13 @@ class UvicornLogFilter(logging.Filter):
                             url = unquote(url)
                             
                             # 发送日志
-                            asyncio.create_task(log_manager.add_log(
-                                f"302跳转 [{ip}]: {url} ({duration} ms)", 
-                                "success"
-                            ))
+                            log_message = f"302跳转 [{ip}]: {url} ({duration} ms)"
+                            console.print(f"[debug]准备发送302日志: {log_message}[/]")
+                            await log_manager.add_log(log_message, "success")
+                            console.print("[debug]302日志发送完成[/]")
                     return False
                 except Exception as e:
+                    console.print(f"[error]处理302日志失败: {str(e)}[/]")
                     asyncio.create_task(log_manager.add_log(f"日志解析错误: {str(e)}\n原始日志: {msg}", "error"))
                     return False
 

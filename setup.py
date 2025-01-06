@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="p115nano302",
+    name="p115nano302-web",
     version="0.0.9",
     packages=find_packages(),
     install_requires=[

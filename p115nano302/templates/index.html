@@ -87,59 +87,62 @@
         constructor() {
             this.logContent = document.getElementById('logContent');
             this.connectionStatus = document.getElementById('connectionStatus');
-            this.ws = null;
-            this.reconnectAttempts = 0;
-            this.maxReconnectAttempts = 5;
-            this.reconnectDelay = 1000;
-            this.reconnecting = false;
-            this.connect();
+            this.lastLogCount = 0;
+            this.updateInterval = 1000; // 每秒更新一次
+            this.startPolling();
         }
 
-        connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
-            
-            this.ws = new WebSocket(wsUrl);
-            
-            this.ws.onopen = () => {
-                console.log('WebSocket连接已建立');
-                this.updateConnectionStatus(true);
-                this.reconnectAttempts = 0;
-                this.reconnectDelay = 1000;
-                
-                // 开始定时发送心跳
-                this.heartbeatInterval = setInterval(() => {
-                    if (this.ws.readyState === WebSocket.OPEN) {
-                        this.ws.send('ping');
-                    }
-                }, 30000);
-            };
-            
-            this.ws.onmessage = (event) => {
-                if (event.data === 'pong') return;
-                
-                try {
-                    const log = JSON.parse(event.data);
-                    this.addLogEntry(log);
-                } catch (error) {
-                    console.error('解析日志失败:', error);
+        async updateLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-            };
-            
-            this.ws.onclose = () => {
-                console.log('WebSocket连接已关闭');
+                const logs = await response.json();
+                
+                // 只有当有新日志时才更新
+                if (logs.length !== this.lastLogCount) {
+                    this.lastLogCount = logs.length;
+                    this.renderLogs(logs);
+                }
+                
+                this.updateConnectionStatus(true);
+            } catch (error) {
+                console.error('获取日志失败:', error);
                 this.updateConnectionStatus(false);
-                clearInterval(this.heartbeatInterval);
-                this.reconnect();
-            };
+            }
         }
 
-        reconnect() {
-            if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                this.reconnectAttempts++;
-                setTimeout(() => this.connect(), this.reconnectDelay);
-                this.reconnectDelay *= 2; // 指数退避
+        renderLogs(logs) {
+            const wasAtBottom = this.isScrolledToBottom();
+            
+            // 创建日志HTML
+            const html = logs.map(log => {
+                const levelClass = {
+                    error: 'text-red-400 border-l-4 border-red-500',
+                    warning: 'text-yellow-400 border-l-4 border-yellow-500',
+                    success: 'text-green-400 border-l-4 border-green-500',
+                    info: 'text-blue-400 border-l-4 border-blue-500'
+                }[log.level] || 'text-blue-400 border-l-4 border-blue-500';
+                
+                return `
+                    <div class="log-entry ${levelClass}">
+                        <span class="text-gray-500">${log.timestamp}</span>
+                        <span class="ml-2">${this.escapeHtml(log.message)}</span>
+                    </div>
+                `;
+            }).join('');
+            
+            this.logContent.innerHTML = html;
+            
+            if (wasAtBottom) {
+                this.scrollToBottom();
             }
+        }
+
+        startPolling() {
+            this.updateLogs();
+            setInterval(() => this.updateLogs(), this.updateInterval);
         }
 
         updateConnectionStatus(connected) {
@@ -158,35 +161,6 @@
                 text.textContent = '连接断开';
                 text.classList.remove('text-green-400');
                 text.classList.add('text-red-400');
-            }
-        }
-
-        addLogEntry(log) {
-            const wasAtBottom = this.isScrolledToBottom();
-            
-            const levelClass = {
-                error: 'text-red-400 border-l-4 border-red-500',
-                warning: 'text-yellow-400 border-l-4 border-yellow-500',
-                success: 'text-green-400 border-l-4 border-green-500',
-                info: 'text-blue-400 border-l-4 border-blue-500'
-            }[log.level] || 'text-blue-400 border-l-4 border-blue-500';
-            
-            const logElement = document.createElement('div');
-            logElement.className = `log-entry ${levelClass}`;
-            logElement.innerHTML = `
-                <span class="text-gray-500">${log.timestamp}</span>
-                <span class="ml-2">${this.escapeHtml(log.message)}</span>
-            `;
-            
-            this.logContent.appendChild(logElement);
-            
-            // 保持最大日志数量
-            while (this.logContent.children.length > 100) {
-                this.logContent.removeChild(this.logContent.firstChild);
-            }
-            
-            if (wasAtBottom) {
-                this.scrollToBottom();
             }
         }
 

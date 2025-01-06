@@ -118,18 +118,22 @@ class UvicornLogFilter(logging.Filter):
         )):
             return False
             
-        # 如果是302请求日志，添加到我们的日志系统
-        if ' - 302 Found - ' in msg and 'pickcode=' in msg:
+        # 如果是302请求日志，添加到我们的日志系统并过滤原始日志
+        if ' - 302 Found - ' in msg:
             try:
-                # 提取URL和响应时间
-                parts = msg.split(' - ')
-                url = parts[1].strip('"')  # 获取URL部分
-                duration = parts[-1].strip()  # 获取响应时间
-                url = unquote(url.replace('[0m', '').strip())  # 清理URL
-                add_log(f"302跳转: {url} ({duration})", "success")
+                # 检查是否包含pickcode
+                if 'pickcode=' in msg:
+                    # 提取URL和响应时间
+                    match = re.search(r'"GET (.*?) HTTP/1\.[01]" - 302 Found - ([\d.]+) ms', msg)
+                    if match:
+                        url = match.group(1)
+                        duration = match.group(2)
+                        url = unquote(url.replace('[0m', '').strip())
+                        add_log(f"302跳转: {url} ({duration} ms)", "success")
+                return False  # 过滤掉所有302日志
             except Exception as e:
                 add_log(f"日志解析错误: {str(e)}", "error")
-            return False  # 不显示原始日志
+                return False
             
         # 对于其他日志，如果包含重要信息则记录
         if any((
@@ -139,6 +143,7 @@ class UvicornLogFilter(logging.Filter):
             'Exception' in msg,
         )):
             add_log(msg, "info")
+            return False  # 记录后不再显示原始日志
             
         return True
 

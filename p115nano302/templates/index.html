@@ -58,7 +58,7 @@
                         115 Nano 302服务
                     </h1>
                 </div>
-                <div class="flex items-center space-x-2 bg-gray-700 px-4 py-2 rounded-full">
+                <div id="connectionStatus" class="flex items-center space-x-2 bg-gray-700 px-4 py-2 rounded-full">
                     <div class="status-dot w-2 h-2 bg-green-500 rounded-full"></div>
                     <span class="text-green-400 text-sm font-medium">服务运行中</span>
                 </div>
@@ -77,78 +77,131 @@
                 </h2>
             </div>
             <div id="logContent" class="overflow-auto h-[calc(100vh-12rem)] bg-gray-900 font-mono text-sm p-4">
-                <!-- 日志内容将通过JavaScript动态更新 -->
+                <!-- 日志内容将通过WebSocket动态更新 -->
             </div>
         </main>
     </div>
 
     <script>
-    async function updateLogs() {
-        try {
-            const response = await fetch('/api/logs');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const logs = await response.json();
-            const logContent = document.getElementById('logContent');
+    class LogViewer {
+        constructor() {
+            this.logContent = document.getElementById('logContent');
+            this.connectionStatus = document.getElementById('connectionStatus');
+            this.ws = null;
+            this.reconnectAttempts = 0;
+            this.maxReconnectAttempts = 5;
+            this.reconnectDelay = 1000;
+            this.connect();
+        }
+
+        connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
             
-            if (logs && logs.length > 0) {
-                const wasAtBottom = isScrolledToBottom(logContent);
-                
-                // 创建新的日志HTML
-                const newHtml = logs.map(log => {
-                    const levelClass = {
-                        error: 'text-red-400 border-l-4 border-red-500',
-                        warning: 'text-yellow-400 border-l-4 border-yellow-500',
-                        success: 'text-green-400 border-l-4 border-green-500',
-                        info: 'text-blue-400 border-l-4 border-blue-500'
-                    }[log.level] || 'text-blue-400 border-l-4 border-blue-500';
-                    
-                    return `
-                        <div class="log-entry ${levelClass}">
-                            <span class="text-gray-500">${log.timestamp}</span>
-                            <span class="ml-2">${log.message}</span>
-                        </div>
-                    `;
-                }).join('');
-                
-                // 只有当内容发生变化时才更新DOM
-                if (logContent.innerHTML !== newHtml) {
-                    logContent.innerHTML = newHtml;
-                    if (wasAtBottom) {
-                        scrollToBottom(logContent);
-                    }
-                }
-            } else {
-                logContent.innerHTML = '<div class="log-entry text-gray-500">等待日志...</div>';
+            this.ws = new WebSocket(wsUrl);
+            
+            this.ws.onopen = () => {
+                this.updateConnectionStatus(true);
+                this.reconnectAttempts = 0;
+            };
+            
+            this.ws.onmessage = (event) => {
+                const log = JSON.parse(event.data);
+                this.addLogEntry(log);
+            };
+            
+            this.ws.onclose = () => {
+                this.updateConnectionStatus(false);
+                this.reconnect();
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                this.updateConnectionStatus(false);
+            };
+        }
+
+        reconnect() {
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.reconnectAttempts++;
+                setTimeout(() => this.connect(), this.reconnectDelay);
+                this.reconnectDelay *= 2; // 指数退避
             }
-        } catch (error) {
-            console.error('Error fetching logs:', error);
-            const errorMessage = `
-                <div class="log-entry text-red-400 border-l-4 border-red-500">
-                    <span class="text-gray-500">${new Date().toLocaleString()}</span>
-                    <span class="ml-2">获取日志失败: ${error.message}</span>
-                </div>
+        }
+
+        updateConnectionStatus(connected) {
+            const dot = this.connectionStatus.querySelector('.status-dot');
+            const text = this.connectionStatus.querySelector('span');
+            
+            if (connected) {
+                dot.classList.remove('bg-red-500');
+                dot.classList.add('bg-green-500');
+                text.textContent = '服务运行中';
+                text.classList.remove('text-red-400');
+                text.classList.add('text-green-400');
+            } else {
+                dot.classList.remove('bg-green-500');
+                dot.classList.add('bg-red-500');
+                text.textContent = '连接断开';
+                text.classList.remove('text-green-400');
+                text.classList.add('text-red-400');
+            }
+        }
+
+        addLogEntry(log) {
+            const wasAtBottom = this.isScrolledToBottom();
+            
+            const levelClass = {
+                error: 'text-red-400 border-l-4 border-red-500',
+                warning: 'text-yellow-400 border-l-4 border-yellow-500',
+                success: 'text-green-400 border-l-4 border-green-500',
+                info: 'text-blue-400 border-l-4 border-blue-500'
+            }[log.level] || 'text-blue-400 border-l-4 border-blue-500';
+            
+            const logElement = document.createElement('div');
+            logElement.className = `log-entry ${levelClass}`;
+            logElement.innerHTML = `
+                <span class="text-gray-500">${log.timestamp}</span>
+                <span class="ml-2">${this.escapeHtml(log.message)}</span>
             `;
-            logContent.innerHTML = errorMessage;
+            
+            this.logContent.appendChild(logElement);
+            
+            // 保持最大日志数量
+            while (this.logContent.children.length > 100) {
+                this.logContent.removeChild(this.logContent.firstChild);
+            }
+            
+            if (wasAtBottom) {
+                this.scrollToBottom();
+            }
+        }
+
+        isScrolledToBottom() {
+            return Math.abs(
+                this.logContent.scrollHeight - 
+                this.logContent.clientHeight - 
+                this.logContent.scrollTop
+            ) < 10;
+        }
+
+        scrollToBottom() {
+            this.logContent.scrollTop = this.logContent.scrollHeight;
+        }
+
+        escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
     }
 
-    // 增加自动滚动到底部的函数
-    function scrollToBottom(element) {
-        element.scrollTop = element.scrollHeight;
-    }
-
-    // 检查是否在底部的函数
-    function isScrolledToBottom(element) {
-        return Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop) < 10;
-    }
-
-    // 初始化和定时更新
+    // 初始化日志查看器
     document.addEventListener('DOMContentLoaded', () => {
-        updateLogs();
-        // 每秒更新一次日志
-        setInterval(updateLogs, 1000);
+        new LogViewer();
     });
     </script>
 </body>

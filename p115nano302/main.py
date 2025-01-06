@@ -79,14 +79,28 @@ class LogManager:
             await websocket.send_json(log)
 
     async def disconnect(self, websocket: WebSocket):
-        self.connected_clients.remove(websocket)
+        try:
+            if websocket in self.connected_clients:
+                self.connected_clients.remove(websocket)
+                await websocket.close()
+        except:
+            pass
 
     async def broadcast(self, log_entry: dict):
-        for client in self.connected_clients.copy():
+        disconnected_clients = []
+        for client in self.connected_clients:
             try:
-                await client.send_json(log_entry)
-            except:
+                await asyncio.wait_for(client.send_json(log_entry), timeout=1.0)
+            except Exception as e:
+                console.print(f"[error]广播日志失败: {str(e)}[/]")
+                disconnected_clients.append(client)
+        
+        # 移除断开的客户端
+        for client in disconnected_clients:
+            try:
                 await self.disconnect(client)
+            except:
+                pass
 
 # 创建日志管理器实例
 log_manager = LogManager()
@@ -97,8 +111,18 @@ async def websocket_endpoint(websocket: WebSocket):
     await log_manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()  # 保持连接活跃
-    except:
+            try:
+                # 每5秒发送一次心跳
+                await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+            except asyncio.TimeoutError:
+                try:
+                    # 发送心跳
+                    await websocket.send_text('ping')
+                except:
+                    break
+            except:
+                break
+    finally:
         await log_manager.disconnect(websocket)
 
 # 路由处理
@@ -114,30 +138,33 @@ class UvicornLogFilter(logging.Filter):
             
             # 过滤掉不需要的日志
             if any((
-                'GET /ws/logs' in msg,
                 'GET /static/' in msg,
                 'GET /favicon.ico' in msg,
                 ' 304 ' in msg,
-                'WebSocket connection' in msg
+                'WebSocket /ws/logs' in msg,
+                'connection open' in msg,
+                'connection closed' in msg
             )):
                 return False
                 
             # 处理302请求日志
             if ' 302 Found' in msg:
                 try:
-                    match = re.search(r'"GET (.*?) HTTP.*?" - 302 Found - ([\d.]+)', msg)
+                    # 修改正则表达式以更准确地匹配日志格式
+                    match = re.search(r'(\d+\.\d+\.\d+\.\d+):\d+ - "GET (.*?) HTTP/1\.1" - 302 Found - ([\d.]+) ms', msg)
                     if match:
-                        url = match.group(1)
-                        duration = match.group(2)
-                        url = unquote(url.replace('[0m', '').strip())
+                        ip = match.group(1)
+                        url = match.group(2)
+                        duration = match.group(3)
+                        url = unquote(url)
                         if 'pickcode=' in url:
                             asyncio.create_task(log_manager.add_log(
-                                f"302跳转: {url} ({duration} ms)", 
+                                f"302跳转 [{ip}]: {url} ({duration} ms)", 
                                 "success"
                             ))
                     return False
                 except Exception as e:
-                    asyncio.create_task(log_manager.add_log(str(e), "error"))
+                    asyncio.create_task(log_manager.add_log(f"日志解析错误: {str(e)}", "error"))
                     return False
 
             # 处理其他重要日志
@@ -150,10 +177,17 @@ class UvicornLogFilter(logging.Filter):
                 asyncio.create_task(log_manager.add_log(msg.strip(), "info"))
                 return False
                 
-            return True
+            # 记录所有未被过滤的日志用于调试
+            if not any((
+                'GET /' in msg,
+                'WebSocket' in msg
+            )):
+                asyncio.create_task(log_manager.add_log(f"其他日志: {msg.strip()}", "info"))
+            
+            return False  # 返回False表示不在控制台显示原始日志
             
         except Exception as e:
-            asyncio.create_task(log_manager.add_log(str(e), "error"))
+            asyncio.create_task(log_manager.add_log(f"日志过滤器错误: {str(e)}", "error"))
             return False
 
 async def run_302_service():

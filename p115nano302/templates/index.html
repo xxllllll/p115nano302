@@ -103,11 +103,22 @@
             this.ws.onopen = () => {
                 this.updateConnectionStatus(true);
                 this.reconnectAttempts = 0;
+                this.reconnectDelay = 1000;
             };
             
             this.ws.onmessage = (event) => {
-                const log = JSON.parse(event.data);
-                this.addLogEntry(log);
+                if (event.data === 'ping') {
+                    // 响应心跳
+                    this.ws.send('pong');
+                    return;
+                }
+                
+                try {
+                    const log = JSON.parse(event.data);
+                    this.addLogEntry(log);
+                } catch (error) {
+                    console.error('解析日志失败:', error);
+                }
             };
             
             this.ws.onclose = () => {
@@ -116,7 +127,7 @@
             };
             
             this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
+                console.error('WebSocket错误:', error);
                 this.updateConnectionStatus(false);
             };
         }

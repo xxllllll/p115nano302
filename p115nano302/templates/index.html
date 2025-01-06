@@ -91,6 +91,7 @@
             this.reconnectAttempts = 0;
             this.maxReconnectAttempts = 5;
             this.reconnectDelay = 1000;
+            this.reconnecting = false;
             this.connect();
         }
 
@@ -104,12 +105,17 @@
                 this.updateConnectionStatus(true);
                 this.reconnectAttempts = 0;
                 this.reconnectDelay = 1000;
+                this.reconnecting = false;
             };
             
             this.ws.onmessage = (event) => {
                 if (event.data === 'ping') {
-                    // 响应心跳
                     this.ws.send('pong');
+                    return;
+                }
+                if (event.data === 'reconnect') {
+                    this.reconnecting = true;
+                    this.ws.close();
                     return;
                 }
                 
@@ -123,7 +129,12 @@
             
             this.ws.onclose = () => {
                 this.updateConnectionStatus(false);
-                this.reconnect();
+                if (this.reconnecting) {
+                    this.reconnecting = false;
+                    this.connect();  // 立即重连
+                } else {
+                    this.reconnect();  // 正常重连逻辑
+                }
             };
             
             this.ws.onerror = (error) => {

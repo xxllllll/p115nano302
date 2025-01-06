@@ -53,26 +53,32 @@ class LogManager:
         self._lock = asyncio.Lock()
 
     async def add_log(self, message: str, level: str = "info"):
-        async with self._lock:
-            log_entry = {
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "message": message,
-                "level": level
-            }
-            
-            # 添加日志到列表
-            self.logs.append(log_entry)
-            if len(self.logs) > self.max_logs:
-                self.logs.pop(0)
-            
-            # 打印到控制台
-            console.print(f"[timestamp]{log_entry['timestamp']}[/] [{level}]{message}[/]")
-            
-            # 广播到所有连接的WebSocket客户端
-            if self.connected_clients:
-                await self.broadcast(log_entry)
-            else:
-                console.print("[warning]没有连接的WebSocket客户端[/]")
+        try:
+            async with self._lock:
+                log_entry = {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": message,
+                    "level": level
+                }
+                
+                # 添加日志到列表
+                self.logs.append(log_entry)
+                if len(self.logs) > self.max_logs:
+                    self.logs.pop(0)
+                
+                # 打印到控制台
+                console.print(f"[timestamp]{log_entry['timestamp']}[/] [{level}]{message}[/]")
+                
+                # 广播到所有连接的WebSocket客户端
+                if self.connected_clients:
+                    try:
+                        await self.broadcast(log_entry)
+                    except Exception as e:
+                        console.print(f"[error]广播日志失败: {str(e)}[/]")
+                else:
+                    console.print("[warning]没有连接的WebSocket客户端[/]")
+        except Exception as e:
+            console.print(f"[error]添加日志失败: {str(e)}[/]")
 
     async def connect(self, websocket: WebSocket):
         try:
@@ -105,6 +111,11 @@ class LogManager:
         
         for client in self.connected_clients:
             try:
+                # 检查连接是否仍然打开
+                if not client.client_state.connected:
+                    disconnected_clients.append(client)
+                    continue
+                    
                 await asyncio.wait_for(client.send_json(log_entry), timeout=1.0)
                 console.print(f"[debug]成功发送日志到客户端[/]")
             except Exception as e:
@@ -113,12 +124,12 @@ class LogManager:
         
         # 移除断开的客户端
         for client in disconnected_clients:
-            if client in self.connected_clients:
-                self.connected_clients.remove(client)
-                try:
+            try:
+                if client in self.connected_clients:
+                    self.connected_clients.remove(client)
                     await client.close()
-                except:
-                    pass
+            except Exception as e:
+                console.print(f"[error]关闭断开的客户端失败: {str(e)}[/]")
 
 # 创建日志管理器实例
 log_manager = LogManager()
@@ -128,6 +139,7 @@ log_manager = LogManager()
 async def websocket_endpoint(websocket: WebSocket):
     console.print("[info]收到新的WebSocket连接请求[/]")
     await log_manager.connect(websocket)
+    
     try:
         while True:
             try:
@@ -135,16 +147,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
                 if data == 'pong':
                     continue
+                elif data == 'reconnect':
+                    # 客户端请求重新连接
+                    break
             except asyncio.TimeoutError:
                 try:
                     # 发送心跳
                     await websocket.send_text('ping')
-                except:
-                    console.print("[warning]心跳发送失败，关闭连接[/]")
+                except Exception as e:
+                    console.print(f"[warning]心跳发送失败: {str(e)}[/]")
                     break
+            except WebSocketDisconnect:
+                console.print("[info]客户端主动断开连接[/]")
+                break
             except Exception as e:
                 console.print(f"[error]WebSocket错误: {str(e)}[/]")
-                break
+                # 尝试恢复连接
+                try:
+                    await websocket.send_text('reconnect')
+                except:
+                    break
     finally:
         console.print("[info]WebSocket连接关闭[/]")
         if websocket in log_manager.connected_clients:

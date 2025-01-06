@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: '0 16 * * *'  # UTC 16:00 = 北京时间 00:00
   workflow_dispatch:  # 允许手动触发
+  push:
+    tags:
+      - '*'  # 当推送tag时也触发构建
 
 env:
   DOCKER_IMAGE: xxllllll/p115nano302
@@ -27,14 +30,40 @@ jobs:
       - name: Get latest version from PyPI
         id: pypi_version
         run: |
-          VERSION=$(curl -s https://pypi.org/pypi/p115nano302/json | jq -r '.info.version')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          PYPI_VERSION=$(curl -s https://pypi.org/pypi/p115nano302/json | jq -r '.info.version')
+          DOCKER_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags" | jq -r '.results[].name' | grep -v 'latest' | sort -V | tail -n1 || echo "none")
+          echo "pypi_version=${PYPI_VERSION}" >> $GITHUB_OUTPUT
+          echo "docker_version=${DOCKER_VERSION}" >> $GITHUB_OUTPUT
+          if [ "${DOCKER_VERSION}" != "${PYPI_VERSION}" ]; then
+            echo "need_update=true" >> $GITHUB_OUTPUT
+          else
+            echo "need_update=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Show version info
+        run: |
+          echo "PyPI version: ${{ steps.pypi_version.outputs.pypi_version }}"
+          echo "Docker version: ${{ steps.pypi_version.outputs.docker_version }}"
+          echo "Need update: ${{ steps.pypi_version.outputs.need_update }}"
 
       - name: Build and push
+        if: steps.pypi_version.outputs.need_update == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
             ${{ env.DOCKER_IMAGE }}:latest
-            ${{ env.DOCKER_IMAGE }}:${{ steps.pypi_version.outputs.version }} 
+            ${{ env.DOCKER_IMAGE }}:${{ steps.pypi_version.outputs.pypi_version }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
+
+      - name: Update Docker Hub description
+        if: steps.pypi_version.outputs.need_update == 'true'
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKER_IMAGE }}
+          readme-filepath: ./README.md 

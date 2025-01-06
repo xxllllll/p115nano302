@@ -7,6 +7,11 @@ on:
   push:
     tags:
       - '*'  # 当推送tag时也触发构建
+    paths:
+      - 'Dockerfile'
+      - 'log_viewer.py'
+      - 'start.sh'
+      - '.github/workflows/docker-build.yml'
 
 env:
   DOCKER_IMAGE: xxllllll/p115nano302
@@ -39,7 +44,7 @@ jobs:
           DOCKER_VERSION=$(curl -s "https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/tags" | jq -r '.results[].name' | grep -v 'latest' | sort -V | tail -n1 || echo "none")
           echo "pypi_version=${PYPI_VERSION}" >> $GITHUB_OUTPUT
           echo "docker_version=${DOCKER_VERSION}" >> $GITHUB_OUTPUT
-          if [ "${DOCKER_VERSION}" != "${PYPI_VERSION}" ]; then
+          if [ "${DOCKER_VERSION}" != "${PYPI_VERSION}" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "${{ github.event_name }}" == "push" ]; then
             echo "need_update=true" >> $GITHUB_OUTPUT
           else
             echo "need_update=false" >> $GITHUB_OUTPUT
@@ -50,6 +55,7 @@ jobs:
           echo "PyPI version: ${{ steps.pypi_version.outputs.pypi_version }}"
           echo "Docker version: ${{ steps.pypi_version.outputs.docker_version }}"
           echo "Need update: ${{ steps.pypi_version.outputs.need_update }}"
+          echo "Event name: ${{ github.event_name }}"
 
       - name: Build and push
         if: steps.pypi_version.outputs.need_update == 'true'

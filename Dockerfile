@@ -13,9 +13,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade pip && \
     pip cache purge && \
-    # 先安装p115nano302包
     pip install --no-cache-dir p115nano302>=0.0.9 && \
-    # 验证安装
     python -c "import p115nano302; print('p115nano302 installed successfully')"
 
 # 创建必要的目录
@@ -32,7 +30,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
     TZ=Asia/Shanghai \
     COOKIES="" \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PYTHONDONTWRITEBYTECODE=1
 
 # 设置权限
 RUN chmod -R 755 /app
@@ -41,4 +40,4 @@ RUN chmod -R 755 /app
 EXPOSE 8000 8001
 
 # 启动应用
-CMD ["python", "p115nano302/main.py"]
+CMD ["python", "-u", "p115nano302/main.py"]

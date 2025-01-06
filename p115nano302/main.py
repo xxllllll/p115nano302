@@ -191,7 +191,7 @@ class UvicornLogFilter(logging.Filter):
                             # 发送日志
                             log_message = f"302跳转 [{ip}]: {url} ({duration} ms)"
                             console.print(f"[debug]准备发送302日志: {log_message}[/]")
-                            await log_manager.add_log(log_message, "success")
+                            asyncio.create_task(log_manager.add_log(log_message, "success"))
                             console.print("[debug]302日志发送完成[/]")
                     return False
                 except Exception as e:

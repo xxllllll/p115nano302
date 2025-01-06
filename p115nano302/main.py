@@ -60,26 +60,41 @@ templates_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 templates = Jinja2Templates(directory=str(templates_dir))
 
-# 日志存储
-logs = deque(maxlen=100)
+# 修改日志存储的实现
+class LogStore:
+    def __init__(self, maxlen=100):
+        self.logs = deque(maxlen=maxlen)
+        self._lock = asyncio.Lock()  # 添加锁以确保线程安全
 
-def add_log(message: str, level: str = "info"):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = {
-        "timestamp": timestamp,
-        "message": message,
-        "level": level
-    }
-    logs.append(log_entry)
-    
-    if level == "error":
-        console.print(f"[timestamp]{timestamp}[/] [error]{message}[/]")
-    elif level == "warning":
-        console.print(f"[timestamp]{timestamp}[/] [warning]{message}[/]")
-    elif level == "success":
-        console.print(f"[timestamp]{timestamp}[/] [success]{message}[/]")
-    else:
-        console.print(f"[timestamp]{timestamp}[/] [info]{message}[/]")
+    async def add(self, message: str, level: str = "info"):
+        async with self._lock:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = {
+                "timestamp": timestamp,
+                "message": message,
+                "level": level
+            }
+            self.logs.append(log_entry)
+            
+            # 使用rich输出到控制台
+            if level == "error":
+                console.print(f"[timestamp]{timestamp}[/] [error]{message}[/]")
+            elif level == "warning":
+                console.print(f"[timestamp]{timestamp}[/] [warning]{message}[/]")
+            elif level == "success":
+                console.print(f"[timestamp]{timestamp}[/] [success]{message}[/]")
+            else:
+                console.print(f"[timestamp]{timestamp}[/] [info]{message}[/]")
+
+    def get_logs(self):
+        return list(self.logs)
+
+# 创建全局日志存储实例
+log_store = LogStore()
+
+# 修改add_log函数为异步函数
+async def add_log(message: str, level: str = "info"):
+    await log_store.add(message, level)
 
 def log_request(host: str, method: str, path: str, status_code: int):
     try:
@@ -95,12 +110,7 @@ async def read_root(request: Request):
 
 @app.get("/api/logs")
 async def get_logs():
-    return [{
-        "timestamp": log["timestamp"],
-        "message": log["message"],
-        "level": log["level"],
-        "formatted": f"[{log['timestamp']}] [{log['level']}] {log['message']}"
-    } for log in logs]
+    return log_store.get_logs()
 
 class UvicornLogFilter(logging.Filter):
     def __init__(self):
@@ -128,10 +138,11 @@ class UvicornLogFilter(logging.Filter):
                         duration = match.group(2)
                         url = unquote(url.replace('[0m', '').strip())
                         if 'pickcode=' in url:
-                            add_log(f"302跳转: {url} ({duration} ms)", "success")
+                            # 使用asyncio.create_task来异步添加日志
+                            asyncio.create_task(add_log(f"302跳转: {url} ({duration} ms)", "success"))
                     return False
                 except Exception as e:
-                    add_log(f"日志解析错误: {str(e)}", "error")
+                    asyncio.create_task(add_log(f"日志解析错误: {str(e)}", "error"))
                     return False
 
             # 处理其他重要日志
@@ -141,13 +152,13 @@ class UvicornLogFilter(logging.Filter):
                 'Error:' in msg,
                 'Exception' in msg,
             )):
-                add_log(msg.strip(), "info")
+                asyncio.create_task(add_log(msg.strip(), "info"))
                 return False
                 
             return True
             
         except Exception as e:
-            add_log(f"日志过滤器错误: {str(e)}", "error")
+            asyncio.create_task(add_log(f"日志过滤器错误: {str(e)}", "error"))
             return False
 
 async def run_302_service():
@@ -162,16 +173,16 @@ async def run_302_service():
         
         # 如果还是没有cookies，记录错误并退出
         if not cookies:
-            add_log("No cookies found. Please set COOKIES environment variable or create 115-cookies.txt file", "error")
+            await add_log("No cookies found. Please set COOKIES environment variable or create 115-cookies.txt file", "error")
             return
             
         # 验证cookies不为空且格式正确
         if not cookies or 'UID' not in cookies or 'CID' not in cookies:
-            add_log("Invalid cookies format. Must contain UID and CID", "error")
+            await add_log("Invalid cookies format. Must contain UID and CID", "error")
             return
             
-        add_log("Starting 302 service...", "success")
-        add_log(f"Cookies length: {len(cookies)}", "info")
+        await add_log("Starting 302 service...", "success")
+        await add_log(f"Cookies length: {len(cookies)}", "info")
         
         make_application = p115nano302.make_application
         app_302 = make_application(

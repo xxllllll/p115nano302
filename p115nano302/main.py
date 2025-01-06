@@ -106,30 +106,18 @@ class LogManager:
         if not self.connected_clients:
             return
 
-        disconnected_clients = []
-        console.print(f"[debug]准备广播日志到 {len(self.connected_clients)} 个客户端[/]")
-        
+        disconnected = []
         for client in self.connected_clients:
             try:
-                # 检查连接是否仍然打开
-                if not client.client_state.connected:
-                    disconnected_clients.append(client)
-                    continue
-                    
-                await asyncio.wait_for(client.send_json(log_entry), timeout=1.0)
-                console.print(f"[debug]成功发送日志到客户端[/]")
+                await client.send_json(log_entry)
             except Exception as e:
-                console.print(f"[error]广播日志失败: {str(e)}[/]")
-                disconnected_clients.append(client)
+                console.print(f"[error]发送日志失败: {str(e)}[/]")
+                disconnected.append(client)
         
         # 移除断开的客户端
-        for client in disconnected_clients:
-            try:
-                if client in self.connected_clients:
-                    self.connected_clients.remove(client)
-                    await client.close()
-            except Exception as e:
-                console.print(f"[error]关闭断开的客户端失败: {str(e)}[/]")
+        for client in disconnected:
+            if client in self.connected_clients:
+                self.connected_clients.remove(client)
 
 # 创建日志管理器实例
 log_manager = LogManager()
@@ -138,39 +126,35 @@ log_manager = LogManager()
 @app.websocket("/ws/logs")
 async def websocket_endpoint(websocket: WebSocket):
     console.print("[info]收到新的WebSocket连接请求[/]")
-    await log_manager.connect(websocket)
-    
     try:
+        await websocket.accept()
+        log_manager.connected_clients.append(websocket)
+        console.print(f"[info]新的WebSocket客户端连接，当前连接数: {len(log_manager.connected_clients)}[/]")
+        
+        # 发送现有日志
+        for log in log_manager.logs:
+            try:
+                await websocket.send_json(log)
+                await asyncio.sleep(0.01)  # 添加小延迟避免消息堆积
+            except Exception as e:
+                console.print(f"[error]发送历史日志失败: {str(e)}[/]")
+                break
+        
+        # 保持连接
         while True:
             try:
-                # 每5秒发送一次心跳
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
-                if data == 'pong':
-                    continue
-                elif data == 'reconnect':
-                    # 客户端请求重新连接
-                    break
-            except asyncio.TimeoutError:
-                try:
-                    # 发送心跳
-                    await websocket.send_text('ping')
-                except Exception as e:
-                    console.print(f"[warning]心跳发送失败: {str(e)}[/]")
-                    break
-            except WebSocketDisconnect:
-                console.print("[info]客户端主动断开连接[/]")
-                break
+                data = await websocket.receive_text()
+                if data == "ping":
+                    await websocket.send_text("pong")
             except Exception as e:
-                console.print(f"[error]WebSocket错误: {str(e)}[/]")
-                # 尝试恢复连接
-                try:
-                    await websocket.send_text('reconnect')
-                except:
-                    break
+                console.print(f"[warning]WebSocket错误: {str(e)}[/]")
+                break
+    except Exception as e:
+        console.print(f"[error]WebSocket连接错误: {str(e)}[/]")
     finally:
-        console.print("[info]WebSocket连接关闭[/]")
         if websocket in log_manager.connected_clients:
             log_manager.connected_clients.remove(websocket)
+        console.print("[info]WebSocket连接关闭[/]")
 
 # 路由处理
 @app.get("/")
@@ -195,53 +179,44 @@ class UvicornLogFilter(logging.Filter):
                 return False
                 
             # 处理302请求日志
-            if ' 302 Found' in msg:
+            if ' 302 Found' in msg and 'pickcode=' in msg:
                 try:
-                    console.print(f"[debug]收到302日志: {msg}[/]")  # 添加调试日志
-                    if 'pickcode=' in msg:
-                        # 提取IP地址
-                        ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+):\d+', msg)
-                        ip = ip_match.group(1) if ip_match else 'unknown'
+                    # 使用更简单的方式提取信息
+                    parts = msg.split(' - ')
+                    if len(parts) >= 4:
+                        ip = parts[0].split(':')[0].strip()
+                        url = parts[1].strip('"')
+                        duration = parts[-1].strip()
                         
-                        # 提取URL和响应时间
-                        url_match = re.search(r'"GET (.*?) HTTP/1\.1".*?(\d+\.?\d*)\s*ms', msg)
-                        if url_match:
-                            url = url_match.group(1)
-                            duration = url_match.group(2)
-                            url = unquote(url)
-                            
-                            # 发送日志
-                            log_message = f"302跳转 [{ip}]: {url} ({duration} ms)"
-                            console.print(f"[debug]准备发送302日志: {log_message}[/]")
-                            asyncio.create_task(log_manager.add_log(log_message, "success"))
-                            console.print("[debug]302日志发送完成[/]")
-                    return False
+                        # 解码URL
+                        url = unquote(url.replace('GET ', '').split(' HTTP')[0])
+                        
+                        # 构造日志消息
+                        log_message = f"302跳转 [{ip}]: {url} ({duration})"
+                        console.print(f"[debug]发送302日志: {log_message}[/]")
+                        
+                        # 使用create_task发送日志
+                        loop = asyncio.get_event_loop()
+                        loop.create_task(log_manager.add_log(log_message, "success"))
                 except Exception as e:
                     console.print(f"[error]处理302日志失败: {str(e)}[/]")
-                    asyncio.create_task(log_manager.add_log(f"日志解析错误: {str(e)}\n原始日志: {msg}", "error"))
-                    return False
+                return False
 
             # 处理其他重要日志
             if any((
                 'Starting 302 service' in msg,
                 'Cookies length:' in msg,
                 'Error:' in msg,
-                'Exception' in msg,
+                'Exception in ASGI application' in msg,
             )):
-                asyncio.create_task(log_manager.add_log(msg.strip(), "info"))
+                loop = asyncio.get_event_loop()
+                loop.create_task(log_manager.add_log(msg.strip(), "error" if "Exception" in msg else "info"))
                 return False
                 
-            # 记录所有未被过滤的日志用于调试
-            if not any((
-                'GET /' in msg,
-                'WebSocket' in msg
-            )):
-                asyncio.create_task(log_manager.add_log(f"其他日志: {msg.strip()}", "info"))
-            
-            return False  # 返回False表示不在控制台显示原始日志
+            return False
             
         except Exception as e:
-            asyncio.create_task(log_manager.add_log(f"日志过滤器错误: {str(e)}", "error"))
+            console.print(f"[error]日志过滤器错误: {str(e)}[/]")
             return False
 
 async def run_302_service():

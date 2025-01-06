@@ -102,22 +102,21 @@
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onopen = () => {
+                console.log('WebSocket连接已建立');
                 this.updateConnectionStatus(true);
                 this.reconnectAttempts = 0;
                 this.reconnectDelay = 1000;
-                this.reconnecting = false;
+                
+                // 开始定时发送心跳
+                this.heartbeatInterval = setInterval(() => {
+                    if (this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send('ping');
+                    }
+                }, 30000);
             };
             
             this.ws.onmessage = (event) => {
-                if (event.data === 'ping') {
-                    this.ws.send('pong');
-                    return;
-                }
-                if (event.data === 'reconnect') {
-                    this.reconnecting = true;
-                    this.ws.close();
-                    return;
-                }
+                if (event.data === 'pong') return;
                 
                 try {
                     const log = JSON.parse(event.data);
@@ -128,18 +127,10 @@
             };
             
             this.ws.onclose = () => {
+                console.log('WebSocket连接已关闭');
                 this.updateConnectionStatus(false);
-                if (this.reconnecting) {
-                    this.reconnecting = false;
-                    this.connect();  // 立即重连
-                } else {
-                    this.reconnect();  // 正常重连逻辑
-                }
-            };
-            
-            this.ws.onerror = (error) => {
-                console.error('WebSocket错误:', error);
-                this.updateConnectionStatus(false);
+                clearInterval(this.heartbeatInterval);
+                this.reconnect();
             };
         }
 

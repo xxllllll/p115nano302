@@ -51,8 +51,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: .  # 修改这里，使用根目录
-          file: ./Dockerfile  # 添加这行，指定Dockerfile位置
+          context: .        # 使用根目录
+          file: Dockerfile  # 直接使用根目录的Dockerfile
           push: true
           tags: |
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest

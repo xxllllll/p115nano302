@@ -13,12 +13,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade pip && \
     pip cache purge && \
-    # 确保先卸载旧版本
-    pip uninstall -y p115nano302 && \
-    # 安装最新版本
-    pip install --no-cache-dir p115nano302>=0.0.9 && \
-    # 验证安装
-    python -c "import p115nano302; print(f'p115nano302 version: {p115nano302.__version__}')"
+    # 安装当前目录作为Python包
+    pip install -e .
 
 # 创建必要的目录
 RUN mkdir -p /app/p115nano302/static/css \
@@ -33,9 +29,7 @@ RUN touch /app/115-cookies.txt && \
 ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8 \
     TZ=Asia/Shanghai \
-    COOKIES="" \
-    # 添加Python路径
-    PYTHONPATH=/app
+    COOKIES=""
 
 # 设置权限
 RUN chmod -R 755 /app
@@ -44,4 +38,4 @@ RUN chmod -R 755 /app
 EXPOSE 8000 8001
 
 # 启动应用
-CMD ["python", "-m", "p115nano302.main"]
+CMD ["python", "p115nano302/main.py"]

@@ -5,12 +5,11 @@ WORKDIR /app
 
 # 安装编译工具和依赖
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装p115nano302和所需依赖
-RUN pip install -U p115nano302 flask
+# 安装p115nano302和所需依赖，使用预编译的二进制包
+RUN pip install --only-binary :all: -U p115nano302 flask
 
 # 创建日志目录
 RUN mkdir -p /app/logs

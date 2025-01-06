@@ -105,24 +105,9 @@ async def get_logs():
 class UvicornLogFilter(logging.Filter):
     def __init__(self):
         super().__init__()
-        self.access_log_pattern = re.compile(r'"([^"]*)" - (\d{3}).*- ([\d.]+) ms')
     
     def filter(self, record):
         msg = record.getMessage()
-        
-        # 处理访问日志
-        if isinstance(msg, str) and ' - "GET ' in msg:
-            try:
-                # 移除ANSI转义序列
-                clean_msg = re.sub(r'\x1b\[[0-9;]*[mK]', '', msg)
-                match = self.access_log_pattern.search(clean_msg)
-                if match:
-                    path, status, duration = match.groups()
-                    if '302' in status:  # 只记录302请求
-                        path = unquote(path.strip())
-                        add_log(f"302跳转: {path} ({duration}ms)", "success")
-            except Exception as e:
-                add_log(f"日志解析错误: {str(e)}", "error")
         
         # 过滤掉不需要的日志
         if any((
@@ -132,6 +117,28 @@ class UvicornLogFilter(logging.Filter):
             ' 304 ' in msg,
         )):
             return False
+            
+        # 如果是302请求日志，添加到我们的日志系统
+        if ' - 302 Found - ' in msg and 'pickcode=' in msg:
+            try:
+                # 提取URL和响应时间
+                parts = msg.split(' - ')
+                url = parts[1].strip('"')  # 获取URL部分
+                duration = parts[-1].strip()  # 获取响应时间
+                url = unquote(url.replace('[0m', '').strip())  # 清理URL
+                add_log(f"302跳转: {url} ({duration})", "success")
+            except Exception as e:
+                add_log(f"日志解析错误: {str(e)}", "error")
+            return False  # 不显示原始日志
+            
+        # 对于其他日志，如果包含重要信息则记录
+        if any((
+            'Starting 302 service' in msg,
+            'Cookies length' in msg,
+            'Error' in msg,
+            'Exception' in msg,
+        )):
+            add_log(msg, "info")
             
         return True
 
@@ -167,7 +174,7 @@ async def run_302_service():
 
         # 配置uvicorn日志
         log_config = uvicorn.config.LOGGING_CONFIG
-        # 简化日志格式
+        # 使用简单的日志格式
         log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(message)s'
         log_config["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
         
@@ -184,12 +191,12 @@ async def run_302_service():
         )
         server = uvicorn.Server(config)
         
-        # 添加日志过滤器
+        # 添加日志过滤器到所有相关的日志处理器
         log_filter = UvicornLogFilter()
-        for handler in logging.getLogger("uvicorn").handlers:
-            handler.addFilter(log_filter)
-        for handler in logging.getLogger("uvicorn.access").handlers:
-            handler.addFilter(log_filter)
+        for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
+            logger = logging.getLogger(logger_name)
+            for handler in logger.handlers:
+                handler.addFilter(log_filter)
         
         await server.serve()
     except Exception as e:
@@ -207,14 +214,9 @@ async def run_web_interface():
         host="0.0.0.0",
         port=8001,
         log_config=log_config,
-        access_log=False
+        access_log=False  # 关闭Web界面的访问日志
     )
     server = uvicorn.Server(config)
-    
-    # 添加日志过滤器
-    for handler in logging.getLogger("uvicorn").handlers:
-        handler.addFilter(UvicornLogFilter())
-    
     await server.serve()
 
 async def main():
@@ -223,6 +225,9 @@ async def main():
         run_302_service(),
         run_web_interface()
     )
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())

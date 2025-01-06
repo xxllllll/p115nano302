@@ -6,12 +6,13 @@ setup(
     packages=find_packages(),
     install_requires=[
         "fastapi",
-        "uvicorn",
+        "uvicorn[standard]",
         "jinja2",
         "aiofiles",
         "python-multipart",
         "orjson",
         "rich>=13.7.0",
-        "p115nano302>=0.0.9"
+        "p115nano302>=0.0.9",
+        "websockets>=10.0"
     ],
 ) 

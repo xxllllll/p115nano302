@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade pip && \
     pip cache purge && \
-    pip install --no-cache-dir p115nano302>=0.0.9 && \
+    pip install --no-cache-dir p115nano302>=0.0.9 'uvicorn[standard]' websockets>=10.0 && \
     python -c "import p115nano302; print('p115nano302 installed successfully')"
 
 # 创建必要的目录

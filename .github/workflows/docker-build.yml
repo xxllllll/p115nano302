@@ -12,7 +12,7 @@ on:
 
 env:
   DOCKER_REGISTRY: docker.io
-  DOCKER_IMAGE: your-dockerhub-username/p115nano302
+  DOCKER_IMAGE: xxllllll/p115nano302  # 更新为你的Docker Hub用户名
   PACKAGE_NAME: p115nano302
 
 jobs:
@@ -51,7 +51,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: ./p115nano302
+          context: .  # 修改这里，使用根目录
+          file: ./Dockerfile  # 添加这行，指定Dockerfile位置
           push: true
           tags: |
             ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest
@@ -59,4 +60,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            BUILDTIME=${{ github.event.repository.updated_at }} 
+            BUILDTIME=${{ github.event.repository.updated_at }}

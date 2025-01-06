@@ -66,10 +66,16 @@ jobs:
 
       - name: Update Docker Hub description
         if: steps.pypi_version.outputs.need_update == 'true'
-        uses: peter-evans/dockerhub-description@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKER_IMAGE }}
-          readme-filepath: ./README.md
-          short-description: ${{ github.event.repository.description }} 
+        run: |
+          # 获取 README 内容
+          README_CONTENT=$(cat README.md)
+          
+          # 获取 Docker Hub JWT token
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${{ secrets.DOCKERHUB_USERNAME }}'", "password": "'${{ secrets.DOCKERHUB_TOKEN }}'"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
+          
+          # 更新仓库描述
+          curl -s -H "Authorization: JWT ${TOKEN}" \
+               -H "Content-Type: application/json" \
+               -X PATCH \
+               -d "{\"full_description\": $(jq -Rs . < README.md)}" \
+               "https://hub.docker.com/v2/repositories/${DOCKER_IMAGE}/" 

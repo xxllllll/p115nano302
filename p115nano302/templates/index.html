@@ -86,58 +86,68 @@
     async function updateLogs() {
         try {
             const response = await fetch('/api/logs');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const logs = await response.json();
             const logContent = document.getElementById('logContent');
             
             if (logs && logs.length > 0) {
                 const wasAtBottom = isScrolledToBottom(logContent);
                 
-                const newHtml = logs.map(log => `
-                    <div class="log-entry ${getLogClass(log.level)}">
-                        <span class="text-gray-500">${log.timestamp}</span>
-                        <span class="ml-2">${log.message}</span>
-                    </div>
-                `).join('');
+                // 创建新的日志HTML
+                const newHtml = logs.map(log => {
+                    const levelClass = {
+                        error: 'text-red-400 border-l-4 border-red-500',
+                        warning: 'text-yellow-400 border-l-4 border-yellow-500',
+                        success: 'text-green-400 border-l-4 border-green-500',
+                        info: 'text-blue-400 border-l-4 border-blue-500'
+                    }[log.level] || 'text-blue-400 border-l-4 border-blue-500';
+                    
+                    return `
+                        <div class="log-entry ${levelClass}">
+                            <span class="text-gray-500">${log.timestamp}</span>
+                            <span class="ml-2">${log.message}</span>
+                        </div>
+                    `;
+                }).join('');
                 
-                logContent.innerHTML = newHtml;
-                
-                if (wasAtBottom) {
-                    scrollToBottom(logContent);
+                // 只有当内容发生变化时才更新DOM
+                if (logContent.innerHTML !== newHtml) {
+                    logContent.innerHTML = newHtml;
+                    if (wasAtBottom) {
+                        scrollToBottom(logContent);
+                    }
                 }
             } else {
-                logContent.innerHTML = '<div class="log-entry">等待日志...</div>';
+                logContent.innerHTML = '<div class="log-entry text-gray-500">等待日志...</div>';
             }
         } catch (error) {
             console.error('Error fetching logs:', error);
-            logContent.innerHTML = `
-                <div class="log-entry text-red-400">
-                    获取日志失败: ${error.message}
+            const errorMessage = `
+                <div class="log-entry text-red-400 border-l-4 border-red-500">
+                    <span class="text-gray-500">${new Date().toLocaleString()}</span>
+                    <span class="ml-2">获取日志失败: ${error.message}</span>
                 </div>
             `;
+            logContent.innerHTML = errorMessage;
         }
     }
 
-    function getLogClass(level) {
-        const classes = {
-            error: 'text-red-400 border-l-4 border-red-500',
-            warning: 'text-yellow-400 border-l-4 border-yellow-500',
-            success: 'text-green-400 border-l-4 border-green-500',
-            info: 'text-blue-400 border-l-4 border-blue-500'
-        };
-        return classes[level] || classes.info;
-    }
-
-    function isScrolledToBottom(element) {
-        return Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop) < 10;
-    }
-
+    // 增加自动滚动到底部的函数
     function scrollToBottom(element) {
         element.scrollTop = element.scrollHeight;
     }
 
-    // 初始化
+    // 检查是否在底部的函数
+    function isScrolledToBottom(element) {
+        return Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop) < 10;
+    }
+
+    // 初始化和定时更新
     document.addEventListener('DOMContentLoaded', () => {
         updateLogs();
+        // 每秒更新一次日志
         setInterval(updateLogs, 1000);
     });
     </script>

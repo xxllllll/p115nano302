@@ -187,7 +187,7 @@ async def run_302_service():
             app_302, 
             host="0.0.0.0", 
             port=8000,
-            log_config=log_config,
+            log_config=None,  # 禁用默认日志配置
             access_log=True,
             proxy_headers=True,
             server_header=False,
@@ -195,44 +195,39 @@ async def run_302_service():
             timeout_graceful_shutdown=1
         )
         server = uvicorn.Server(config)
-        
-        # 添加日志过滤器到所有相关的日志处理器
-        log_filter = UvicornLogFilter()
-        for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
-            logger = logging.getLogger(logger_name)
-            for handler in logger.handlers:
-                handler.addFilter(log_filter)
-        
         await server.serve()
     except Exception as e:
         add_log(f"302服务错误: {str(e)}", "error")
         raise
 
 async def run_web_interface():
-    # 配置uvicorn日志
-    log_config = uvicorn.config.LOGGING_CONFIG
-    log_config["formatters"]["access"]["fmt"] = "%(asctime)s - %(message)s"
-    log_config["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
-    
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
         port=8001,
-        log_config=log_config,
-        access_log=False  # 关闭Web界面的访问日志
+        log_config=None,  # 禁用默认日志配置
+        access_log=False
     )
     server = uvicorn.Server(config)
     await server.serve()
 
 async def main():
+    # 修改日志配置
+    log_filter = UvicornLogFilter()
+    
+    # 在启动服务之前配置日志过滤器
+    for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
+        logger = logging.getLogger(logger_name)
+        logger.handlers = []  # 清除现有的处理器
+        handler = logging.StreamHandler()
+        handler.addFilter(log_filter)
+        logger.addHandler(handler)
+    
     # 并发运行两个服务
     await asyncio.gather(
         run_302_service(),
         run_web_interface()
     )
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 if __name__ == "__main__":
     asyncio.run(main())

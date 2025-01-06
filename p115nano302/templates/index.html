@@ -5,69 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>115 Nano 302服务</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
     <style>
-        .log-container {
-            height: calc(100vh - 200px);
-            background-color: #1a1a1a;
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
         }
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4B5563;
+        }
+        
+        /* 日志样式 */
         .log-entry {
-            font-family: 'Fira Code', monospace;
-            padding: 4px 8px;
-            border-left: 4px solid transparent;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            padding: 6px 12px;
+            margin: 4px 0;
+            border-radius: 4px;
+            transition: all 0.2s;
         }
         .log-entry:hover {
             background-color: rgba(255, 255, 255, 0.05);
         }
-        .log-info { border-left-color: #0ea5e9; }
-        .log-error { border-left-color: #ef4444; }
-        .log-warning { border-left-color: #f59e0b; }
-        .log-success { border-left-color: #22c55e; }
-        .timestamp { color: #64748b; }
-        .message.info { color: #0ea5e9; }
-        .message.error { color: #ef4444; }
-        .message.warning { color: #f59e0b; }
-        .message.success { color: #22c55e; }
         
+        /* 状态动画 */
         @keyframes pulse {
-            0% { transform: scale(1); }
+            0%, 100% { transform: scale(1); }
             50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
         }
         .status-dot {
             animation: pulse 2s infinite;
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <header class="mb-8">
-            <div class="flex justify-between items-center">
-                <h1 class="text-3xl font-bold text-blue-500">115 Nano 302服务</h1>
-                <div class="flex items-center space-x-2 bg-opacity-20 bg-green-500 px-4 py-2 rounded-full">
-                    <div class="status-dot w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span class="text-green-500 font-medium">服务运行中</span>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6">
+        <!-- 头部 -->
+        <header class="mb-6">
+            <div class="flex justify-between items-center bg-gray-800 rounded-lg p-4 shadow-lg">
+                <div class="flex items-center space-x-4">
+                    <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-500 to-teal-400 bg-clip-text text-transparent">
+                        115 Nano 302服务
+                    </h1>
+                </div>
+                <div class="flex items-center space-x-2 bg-gray-700 px-4 py-2 rounded-full">
+                    <div class="status-dot w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span class="text-green-400 text-sm font-medium">服务运行中</span>
                 </div>
             </div>
         </header>
 
-        <main>
-            <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-                <div class="px-6 py-4 bg-gray-700 border-b border-gray-600">
-                    <h2 class="text-xl font-semibold flex items-center space-x-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        <span>实时日志</span>
-                    </h2>
-                </div>
-                <div id="logs" class="overflow-auto h-[calc(100vh-4rem)] p-4 bg-gray-900 text-gray-100 font-mono text-sm">
-                </div>
+        <!-- 日志区域 -->
+        <main class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+            <div class="border-b border-gray-700 p-4 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-300 flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <span>实时日志监控</span>
+                </h2>
+            </div>
+            <div id="logs" class="overflow-auto h-[calc(100vh-12rem)] bg-gray-900 font-mono text-sm">
             </div>
         </main>
     </div>
 
-    <script src="{{ url_for('static', path='/js/script.js') }}"></script>
     <script>
     async function fetchLogs() {
         try {
@@ -75,31 +88,38 @@
             const logs = await response.json();
             const logsDiv = document.getElementById('logs');
             
+            // 保存当前滚动位置
+            const wasScrolledToBottom = 
+                logsDiv.scrollHeight - logsDiv.clientHeight <= logsDiv.scrollTop + 1;
+            
             // 清空现有日志
             logsDiv.innerHTML = '';
             
             // 添加新日志
             logs.forEach(log => {
                 const logEntry = document.createElement('div');
-                logEntry.className = `log-entry mb-1 ${getLogClass(log.level)}`;
+                logEntry.className = `log-entry ${getLogClass(log.level)}`;
                 logEntry.textContent = log.formatted;
                 logsDiv.appendChild(logEntry);
             });
             
-            // 滚动到底部
-            logsDiv.scrollTop = logsDiv.scrollHeight;
+            // 如果之前在底部，保持在底部
+            if (wasScrolledToBottom) {
+                logsDiv.scrollTop = logsDiv.scrollHeight;
+            }
         } catch (error) {
             console.error('Error fetching logs:', error);
         }
     }
 
     function getLogClass(level) {
-        switch(level) {
-            case 'error': return 'text-red-500';
-            case 'warning': return 'text-yellow-500';
-            case 'success': return 'text-green-500';
-            default: return 'text-blue-500';
-        }
+        const classes = {
+            error: 'text-red-400 border-l-4 border-red-500',
+            warning: 'text-yellow-400 border-l-4 border-yellow-500',
+            success: 'text-green-400 border-l-4 border-green-500',
+            info: 'text-blue-400 border-l-4 border-blue-500'
+        };
+        return classes[level] || classes.info;
     }
 
     // 每秒更新一次日志

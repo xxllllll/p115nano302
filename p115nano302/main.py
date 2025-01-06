@@ -105,25 +105,26 @@ async def get_logs():
 class UvicornLogFilter(logging.Filter):
     def __init__(self):
         super().__init__()
-        # 添加用于解析日志的正则表达式
         self.access_log_pattern = re.compile(r'"([^"]*)" - (\d{3}).*- ([\d.]+) ms')
     
     def filter(self, record):
         msg = record.getMessage()
         
-        # 如果是访问日志，解析并添加到我们的日志系统
-        if ' - "GET ' in msg and '" - ' in msg:
+        # 处理访问日志
+        if isinstance(msg, str) and ' - "GET ' in msg:
             try:
-                match = self.access_log_pattern.search(msg)
+                # 移除ANSI转义序列
+                clean_msg = re.sub(r'\x1b\[[0-9;]*[mK]', '', msg)
+                match = self.access_log_pattern.search(clean_msg)
                 if match:
                     path, status, duration = match.groups()
-                    # 使用我们的日志系统记录
-                    path = path.replace("[0m", "").strip()  # 移除ANSI转义序列
-                    add_log(f"302 Request: {path} - {status} - {duration}ms")
+                    if '302' in status:  # 只记录302请求
+                        path = unquote(path.strip())
+                        add_log(f"302跳转: {path} ({duration}ms)", "success")
             except Exception as e:
-                add_log(f"Error parsing log: {str(e)}", "error")
+                add_log(f"日志解析错误: {str(e)}", "error")
         
-        # 过滤掉常规的访问日志
+        # 过滤掉不需要的日志
         if any((
             'GET /api/logs' in msg,
             'GET /static/' in msg,
@@ -166,16 +167,16 @@ async def run_302_service():
 
         # 配置uvicorn日志
         log_config = uvicorn.config.LOGGING_CONFIG
-        log_config["formatters"]["access"]["fmt"] = '%(asctime)s - "%(request_line)s" - %(status_code)s - %(elapsed_time)s ms'
+        # 简化日志格式
+        log_config["formatters"]["access"]["fmt"] = '%(asctime)s - %(message)s'
         log_config["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
-        log_config["handlers"]["access"]["formatter"] = "access"
         
         config = uvicorn.Config(
             app_302, 
             host="0.0.0.0", 
             port=8000,
             log_config=log_config,
-            access_log=True,  # 启用访问日志
+            access_log=True,
             proxy_headers=True,
             server_header=False,
             forwarded_allow_ips="*",
@@ -192,7 +193,7 @@ async def run_302_service():
         
         await server.serve()
     except Exception as e:
-        add_log(f"Error in 302 service: {str(e)}", "error")
+        add_log(f"302服务错误: {str(e)}", "error")
         raise
 
 async def run_web_interface():

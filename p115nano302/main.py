@@ -88,9 +88,11 @@ class LogManager:
 
     async def broadcast(self, log_entry: dict):
         disconnected_clients = []
+        console.print(f"[debug]准备广播日志: {log_entry}[/]")
         for client in self.connected_clients:
             try:
                 await asyncio.wait_for(client.send_json(log_entry), timeout=1.0)
+                console.print(f"[debug]成功发送日志到客户端[/]")
             except Exception as e:
                 console.print(f"[error]广播日志失败: {str(e)}[/]")
                 disconnected_clients.append(client)
@@ -150,21 +152,27 @@ class UvicornLogFilter(logging.Filter):
             # 处理302请求日志
             if ' 302 Found' in msg:
                 try:
-                    # 修改正则表达式以更准确地匹配日志格式
-                    match = re.search(r'(\d+\.\d+\.\d+\.\d+):\d+ - "GET (.*?) HTTP/1\.1" - 302 Found - ([\d.]+) ms', msg)
-                    if match:
-                        ip = match.group(1)
-                        url = match.group(2)
-                        duration = match.group(3)
-                        url = unquote(url)
-                        if 'pickcode=' in url:
+                    # 使用更宽松的正则表达式来匹配302日志
+                    if 'pickcode=' in msg:
+                        # 提取IP地址
+                        ip_match = re.search(r'(\d+\.\d+\.\d+\.\d+):\d+', msg)
+                        ip = ip_match.group(1) if ip_match else 'unknown'
+                        
+                        # 提取URL和响应时间
+                        url_match = re.search(r'"GET (.*?) HTTP/1\.1".*?(\d+\.?\d*)\s*ms', msg)
+                        if url_match:
+                            url = url_match.group(1)
+                            duration = url_match.group(2)
+                            url = unquote(url)
+                            
+                            # 发送日志
                             asyncio.create_task(log_manager.add_log(
                                 f"302跳转 [{ip}]: {url} ({duration} ms)", 
                                 "success"
                             ))
                     return False
                 except Exception as e:
-                    asyncio.create_task(log_manager.add_log(f"日志解析错误: {str(e)}", "error"))
+                    asyncio.create_task(log_manager.add_log(f"日志解析错误: {str(e)}\n原始日志: {msg}", "error"))
                     return False
 
             # 处理其他重要日志

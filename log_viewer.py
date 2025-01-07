@@ -3,7 +3,6 @@ import os
 import re
 import html
 from urllib.parse import unquote
-from datetime import datetime
 
 app = Flask(__name__)
 
@@ -18,8 +17,6 @@ HTML_TEMPLATE = """
         .log-entry {
             transition: background-color 0.2s;
             font-family: 'Cascadia Code', 'Source Code Pro', Consolas, monospace;
-            padding: 2px 8px;
-            border-bottom: 1px solid #f0f0f0;
         }
         .log-entry:hover {
             background-color: #f3f4f6;
@@ -45,21 +42,21 @@ HTML_TEMPLATE = """
             margin-right: 0.3em;
         }
         .log-container-wrapper {
-            height: calc(100vh - 200px);  /* 动态高度 */
-            min-height: 400px;
+            height: 600px;
             background-color: white;
             border: 1px solid #e5e7eb;
             border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+            margin-bottom: 1rem;
         }
         #log-container {
-            flex: 1;
+            height: 100%;
             overflow-y: auto;
             font-size: 0.875rem;
-            line-height: 1.5;
-            padding: 0.5rem 0;
+            line-height: 1.25rem;
+            white-space: pre-wrap;
+            padding: 1rem;
             background-color: #ffffff;
         }
         .log-empty {
@@ -72,34 +69,32 @@ HTML_TEMPLATE = """
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen p-4">
-    <div class="max-w-7xl mx-auto">
-        <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-            <div class="flex justify-between items-center">
-                <h1 class="text-2xl font-bold text-gray-800 flex items-center">
-                    <span class="title-emoji">🌰</span>
-                    <span>Emby 302 Logs</span>
-                </h1>
-                <div class="space-x-2">
-                    <button onclick="refreshLogs()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition duration-200">
-                        刷新日志
-                    </button>
-                    <button onclick="clearLogs()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200">
-                        清空显示
-                    </button>
-                </div>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">
+                <span class="title-emoji">🌰</span>
+                <span>Emby 302 Logs</span>
+            </h1>
+            <div class="space-x-4">
+                <button onclick="refreshLogs()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                    刷新日志
+                </button>
+                <button onclick="clearLogs()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                    清空显示
+                </button>
             </div>
         </div>
         
         <div class="log-container-wrapper">
-            <div id="log-container" class="relative">
+            <div id="log-container">
                 {{ logs | safe }}
             </div>
         </div>
         
-        <div class="mt-4 text-gray-600 text-sm flex space-x-4">
-            <span>自动刷新间隔：5秒</span>
-            <span>显示最近1000行日志</span>
+        <div class="mt-4 text-gray-600 text-sm">
+            <p>自动刷新间隔：5秒</p>
+            <p>显示最近1000行日志</p>
         </div>
     </div>
 
@@ -206,33 +201,14 @@ def logs():
 def get_logs():
     log_file = os.getenv('LOG_FILE', '/app/logs/p115nano302.log')
     try:
-        # 添加调试日志
-        debug_info = f'[{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 日志查看器启动\n'
-        
-        # 如果文件不存在，创建它
-        if not os.path.exists(log_file):
-            with open(log_file, 'w', encoding='utf-8') as f:
-                f.write(debug_info)
-            return '<div class="log-entry log-info">日志文件已创建，等待日志输出...</div>'
-            
-        # 读取日志文件
         with open(log_file, 'r', encoding='utf-8') as f:
-            try:
-                lines = f.readlines()
-                if not lines:
-                    # 如果文件为空，写入一些初始信息
-                    with open(log_file, 'a', encoding='utf-8') as f:
-                        f.write(debug_info)
-                    return '<div class="log-entry log-info">日志文件为空，已添加初始信息</div>'
-                
-                # 只保留最后1000行
-                lines = lines[-1000:]
-                formatted_lines = [format_log_line(line) for line in lines]
-                return ''.join(formatted_lines)
-            except Exception as read_error:
-                return f'<div class="log-entry log-error">读取日志文件时出错: {str(read_error)}</div>'
+            lines = f.readlines()[-1000:]
+            if not lines:  # 如果没有日志
+                return '<div class="log-entry log-info">暂无日志记录</div>'
+            formatted_lines = [format_log_line(line) for line in lines]
+            return ''.join(formatted_lines)
     except Exception as e:
-        return f'<div class="log-entry log-error">处理日志文件时出错: {str(e)}</div>'
+        return f'<div class="log-entry log-error">无法读取日志文件: {str(e)}</div>'
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8001) 

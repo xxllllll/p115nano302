@@ -205,8 +205,15 @@ def logs():
 def get_logs():
     log_file = os.getenv('LOG_FILE', '/app/logs/p115nano302.log')
     try:
+        # 如果文件不存在，创建它
+        if not os.path.exists(log_file):
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write('')
+            return '<div class="log-entry log-info">日志文件已创建，等待日志输出...</div>'
+            
+        # 读取日志文件
         with open(log_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()[-1000:]
+            lines = f.readlines()[-1000:] if f.readable() else []
             if not lines:  # 如果没有日志
                 return '<div class="log-entry log-info">暂无日志记录</div>'
             formatted_lines = [format_log_line(line) for line in lines]

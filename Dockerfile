@@ -31,12 +31,19 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 # 安装运行时依赖
 RUN apk add --no-cache bash
 
-# 创建日志目录
-RUN mkdir -p /app/logs
+# 创建日志目录和文件
+RUN mkdir -p /app/logs && \
+    touch /app/logs/p115nano302.log && \
+    chmod 666 /app/logs/p115nano302.log
 
 # 创建启动脚本
 RUN echo '#!/bin/sh\n\
+# 确保日志文件存在并有正确的权限\n\
+touch /app/logs/p115nano302.log\n\
+chmod 666 /app/logs/p115nano302.log\n\
+# 启动日志查看器\n\
 python /app/log_viewer.py &\n\
+# 启动主程序\n\
 p115nano302\n' > /app/start.sh
 
 # 复制应用文件

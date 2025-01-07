@@ -1,19 +1,22 @@
-# 使用更小的基础镜像
+# 构建阶段
 FROM python:3.12-slim-bullseye as builder
 
 # 设置工作目录
 WORKDIR /app
 
-# 只安装必要的编译工具
+# 安装必要的编译工具和依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     gcc \
+    g++ \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
+RUN pip install --no-cache-dir wheel setuptools
 RUN pip install --no-cache-dir p115nano302 flask
 
-# 使用多阶段构建
+# 最终阶段
 FROM python:3.12-slim-bullseye
 
 WORKDIR /app

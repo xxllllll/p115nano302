@@ -14,8 +14,9 @@ FROM python:3.12-slim-bullseye
 
 WORKDIR /app
 
-# 从builder阶段复制Python包
+# 从builder阶段复制Python包和可执行文件
 COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /usr/local/bin/p115nano302 /usr/local/bin/
 
 # 创建日志目录并复制必要文件
 RUN mkdir -p /app/logs
@@ -25,7 +26,8 @@ RUN chmod +x /app/start.sh
 # 设置环境变量
 ENV HOST=0.0.0.0 \
     PORT=8000 \
-    LOG_FILE=/app/logs/p115nano302.log
+    LOG_FILE=/app/logs/p115nano302.log \
+    PATH="/usr/local/bin:${PATH}"
 
 # 暴露端口
 EXPOSE 8000 8001

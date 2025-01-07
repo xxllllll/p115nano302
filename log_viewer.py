@@ -17,6 +17,8 @@ HTML_TEMPLATE = """
         .log-entry {
             transition: background-color 0.2s;
             font-family: 'Cascadia Code', 'Source Code Pro', Consolas, monospace;
+            padding: 2px 8px;
+            border-bottom: 1px solid #f0f0f0;
         }
         .log-entry:hover {
             background-color: #f3f4f6;
@@ -42,21 +44,21 @@ HTML_TEMPLATE = """
             margin-right: 0.3em;
         }
         .log-container-wrapper {
-            height: 600px;
+            height: calc(100vh - 200px);  /* 动态高度 */
+            min-height: 400px;
             background-color: white;
             border: 1px solid #e5e7eb;
             border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            overflow: hidden;
-            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
         }
         #log-container {
-            height: 100%;
+            flex: 1;
             overflow-y: auto;
             font-size: 0.875rem;
-            line-height: 1.25rem;
-            white-space: pre-wrap;
-            padding: 1rem;
+            line-height: 1.5;
+            padding: 0.5rem 0;
             background-color: #ffffff;
         }
         .log-empty {
@@ -69,32 +71,34 @@ HTML_TEMPLATE = """
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-gray-800">
-                <span class="title-emoji">🌰</span>
-                <span>Emby 302 Logs</span>
-            </h1>
-            <div class="space-x-4">
-                <button onclick="refreshLogs()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition duration-200">
-                    刷新日志
-                </button>
-                <button onclick="clearLogs()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-200">
-                    清空显示
-                </button>
+<body class="bg-gray-50 min-h-screen p-4">
+    <div class="max-w-7xl mx-auto">
+        <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-800 flex items-center">
+                    <span class="title-emoji">🌰</span>
+                    <span>Emby 302 Logs</span>
+                </h1>
+                <div class="space-x-2">
+                    <button onclick="refreshLogs()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition duration-200">
+                        刷新日志
+                    </button>
+                    <button onclick="clearLogs()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition duration-200">
+                        清空显示
+                    </button>
+                </div>
             </div>
         </div>
         
         <div class="log-container-wrapper">
-            <div id="log-container">
+            <div id="log-container" class="relative">
                 {{ logs | safe }}
             </div>
         </div>
         
-        <div class="mt-4 text-gray-600 text-sm">
-            <p>自动刷新间隔：5秒</p>
-            <p>显示最近1000行日志</p>
+        <div class="mt-4 text-gray-600 text-sm flex space-x-4">
+            <span>自动刷新间隔：5秒</span>
+            <span>显示最近1000行日志</span>
         </div>
     </div>
 

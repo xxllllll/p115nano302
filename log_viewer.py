@@ -157,8 +157,10 @@ def format_log_line(line):
     # 转义HTML特殊字符
     line = html.escape(line)
     
-    # 解码URL编码的文件名
-    line = re.sub(r'GET /([^?\s]+)\?', lambda m: f'GET /{unquote(m.group(1))}?', line)
+    # 解码URL编码的文件名 - 支持所有HTTP方法
+    line = re.sub(r'(GET|HEAD|POST|PUT|DELETE) /([^?\s]+)\?', 
+                 lambda m: f'{m.group(1)} /{unquote(m.group(2))}?', 
+                 line)
     
     # 格式化不同部分
     # 处理时间戳

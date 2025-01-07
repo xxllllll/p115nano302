@@ -28,11 +28,19 @@ WORKDIR /app
 # 从builder阶段复制Python包
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
+# 安装运行时依赖
+RUN apk add --no-cache bash
+
 # 创建日志目录
 RUN mkdir -p /app/logs
 
+# 创建启动脚本
+RUN echo '#!/bin/sh\n\
+python /app/log_viewer.py &\n\
+p115nano302\n' > /app/start.sh
+
 # 复制应用文件
-COPY log_viewer.py start.sh /app/
+COPY log_viewer.py /app/
 RUN chmod +x /app/start.sh
 
 # 设置环境变量
@@ -45,4 +53,4 @@ ENV HOST=0.0.0.0 \
 EXPOSE 8000 8001
 
 # 启动应用
-ENTRYPOINT ["/app/start.sh"]
+ENTRYPOINT ["/bin/sh", "/app/start.sh"]

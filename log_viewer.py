@@ -41,6 +41,23 @@ HTML_TEMPLATE = """
             font-size: 1.5em;
             margin-right: 0.3em;
         }
+        #log-container {
+            height: 600px;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            white-space: pre-wrap;
+            background-color: white;
+            border-radius: 0.5rem;
+        }
+        .log-content {
+            flex: 1;
+            min-height: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -60,9 +77,11 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-lg p-6">
-            <div id="log-container" class="text-sm whitespace-pre-wrap h-[600px] overflow-y-auto">
-                {{ logs | safe }}
+        <div class="bg-white rounded-lg shadow-lg">
+            <div id="log-container">
+                <div class="log-content">
+                    {{ logs | safe }}
+                </div>
             </div>
         </div>
         
@@ -77,14 +96,14 @@ HTML_TEMPLATE = """
             fetch('/logs')
                 .then(response => response.text())
                 .then(data => {
-                    const container = document.getElementById('log-container');
+                    const container = document.querySelector('#log-container .log-content');
                     container.innerHTML = data;
                     container.scrollTop = container.scrollHeight;
                 });
         }
         
         function clearLogs() {
-            document.getElementById('log-container').innerHTML = '';
+            document.querySelector('#log-container .log-content').innerHTML = '';
         }
         
         // 自动刷新
@@ -92,7 +111,7 @@ HTML_TEMPLATE = """
         
         // 首次加载时滚动到底部
         window.onload = function() {
-            const container = document.getElementById('log-container');
+            const container = document.querySelector('#log-container .log-content');
             container.scrollTop = container.scrollHeight;
         }
     </script>

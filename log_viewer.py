@@ -44,9 +44,11 @@ HTML_TEMPLATE = """
         .log-container-wrapper {
             height: 600px;
             background-color: white;
+            border: 1px solid #e5e7eb;
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
             overflow: hidden;
+            margin-bottom: 1rem;
         }
         #log-container {
             height: 100%;
@@ -55,6 +57,15 @@ HTML_TEMPLATE = """
             line-height: 1.25rem;
             white-space: pre-wrap;
             padding: 1rem;
+            background-color: #ffffff;
+        }
+        .log-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6b7280;
+            font-style: italic;
         }
     </style>
 </head>
@@ -191,8 +202,9 @@ def get_logs():
     log_file = os.getenv('LOG_FILE', '/app/logs/p115nano302.log')
     try:
         with open(log_file, 'r', encoding='utf-8') as f:
-            # 读取最后1000行日志
             lines = f.readlines()[-1000:]
+            if not lines:  # 如果没有日志
+                return '<div class="log-entry log-info">暂无日志记录</div>'
             formatted_lines = [format_log_line(line) for line in lines]
             return ''.join(formatted_lines)
     except Exception as e:

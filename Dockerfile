@@ -36,12 +36,27 @@ RUN mkdir -p /app/logs && \
 
 # 创建启动脚本
 RUN echo '#!/bin/sh\n\
+set -e\n\
+\n\
+# 初始化日志\n\
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] 容器启动" > /app/logs/p115nano302.log\n\
+\n\
+# 确保目录和权限正确\n\
 mkdir -p /app/logs\n\
-touch /app/logs/p115nano302.log\n\
 chmod 777 /app/logs\n\
+touch /app/logs/p115nano302.log\n\
 chmod 666 /app/logs/p115nano302.log\n\
+\n\
+# 启动日志查看器\n\
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] 启动日志查看器" >> /app/logs/p115nano302.log\n\
 python /app/log_viewer.py &\n\
-p115nano302 "$@" 2>&1 | tee -a /app/logs/p115nano302.log\n' > /app/start.sh
+\n\
+# 记录启动参数\n\
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] 启动参数: $@" >> /app/logs/p115nano302.log\n\
+\n\
+# 启动主程序\n\
+echo "[$(date "+%Y-%m-%d %H:%M:%S")] 启动主程序 p115nano302" >> /app/logs/p115nano302.log\n\
+exec p115nano302 "$@" 2>&1 | tee -a /app/logs/p115nano302.log\n' > /app/start.sh
 
 # 复制应用文件
 COPY log_viewer.py /app/

@@ -1,23 +1,27 @@
 # 构建阶段
-FROM python:3.12-slim-bullseye as builder
+FROM python:3.12-alpine as builder
 
 # 设置工作目录
 WORKDIR /app
 
 # 安装必要的编译工具和依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     python3-dev \
     gcc \
     g++ \
-    make \
-    && rm -rf /var/lib/apt/lists/*
+    musl-dev \
+    linux-headers \
+    make
 
 # 安装依赖
 RUN pip install --no-cache-dir wheel setuptools
-RUN pip install --no-cache-dir p115nano302 flask
+RUN pip install --no-cache-dir uvicorn flask
+
+# 安装 p115nano302（使用预编译的wheel包）
+RUN pip install --no-cache-dir --index-url https://pypi.org/simple p115nano302
 
 # 最终阶段
-FROM python:3.12-slim-bullseye
+FROM python:3.12-alpine
 
 WORKDIR /app
 

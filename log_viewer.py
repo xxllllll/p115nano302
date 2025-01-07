@@ -41,22 +41,20 @@ HTML_TEMPLATE = """
             font-size: 1.5em;
             margin-right: 0.3em;
         }
-        #log-container {
+        .log-container-wrapper {
             height: 600px;
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            overflow: hidden;
+        }
+        #log-container {
+            height: 100%;
             overflow-y: auto;
-            padding: 1rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
             font-size: 0.875rem;
             line-height: 1.25rem;
             white-space: pre-wrap;
-            background-color: white;
-            border-radius: 0.5rem;
-        }
-        .log-content {
-            flex: 1;
-            min-height: 0;
+            padding: 1rem;
         }
     </style>
 </head>
@@ -77,11 +75,9 @@ HTML_TEMPLATE = """
             </div>
         </div>
         
-        <div class="bg-white rounded-lg shadow-lg">
+        <div class="log-container-wrapper">
             <div id="log-container">
-                <div class="log-content">
-                    {{ logs | safe }}
-                </div>
+                {{ logs | safe }}
             </div>
         </div>
         
@@ -96,14 +92,14 @@ HTML_TEMPLATE = """
             fetch('/logs')
                 .then(response => response.text())
                 .then(data => {
-                    const container = document.querySelector('#log-container .log-content');
+                    const container = document.getElementById('log-container');
                     container.innerHTML = data;
                     container.scrollTop = container.scrollHeight;
                 });
         }
         
         function clearLogs() {
-            document.querySelector('#log-container .log-content').innerHTML = '';
+            document.getElementById('log-container').innerHTML = '';
         }
         
         // 自动刷新
@@ -111,7 +107,7 @@ HTML_TEMPLATE = """
         
         // 首次加载时滚动到底部
         window.onload = function() {
-            const container = document.querySelector('#log-container .log-content');
+            const container = document.getElementById('log-container');
             container.scrollTop = container.scrollHeight;
         }
     </script>

@@ -29,22 +29,25 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
 # 安装运行时依赖
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash tini
 
 # 创建日志目录和文件
 RUN mkdir -p /app/logs && \
     touch /app/logs/p115nano302.log && \
+    chmod 777 /app/logs && \
     chmod 666 /app/logs/p115nano302.log
 
 # 创建启动脚本
 RUN echo '#!/bin/sh\n\
-# 确保日志文件存在并有正确的权限\n\
+# 确保日志目录和文件存在并有正确的权限\n\
+mkdir -p /app/logs\n\
 touch /app/logs/p115nano302.log\n\
+chmod 777 /app/logs\n\
 chmod 666 /app/logs/p115nano302.log\n\
 # 启动日志查看器\n\
 python /app/log_viewer.py &\n\
-# 启动主程序\n\
-p115nano302\n' > /app/start.sh
+# 启动主程序并重定向输出到日志文件\n\
+p115nano302 2>&1 | tee -a /app/logs/p115nano302.log\n' > /app/start.sh
 
 # 复制应用文件
 COPY log_viewer.py /app/
@@ -59,5 +62,6 @@ ENV HOST=0.0.0.0 \
 # 暴露端口
 EXPOSE 8000 8001
 
-# 启动应用
-ENTRYPOINT ["/bin/sh", "/app/start.sh"]
+# 使用 tini 作为初始化系统
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/bin/sh", "/app/start.sh"]

@@ -3,6 +3,7 @@ import os
 import re
 import html
 from urllib.parse import unquote
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -205,21 +206,33 @@ def logs():
 def get_logs():
     log_file = os.getenv('LOG_FILE', '/app/logs/p115nano302.log')
     try:
+        # 添加调试日志
+        debug_info = f'[{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] 日志查看器启动\n'
+        
         # 如果文件不存在，创建它
         if not os.path.exists(log_file):
             with open(log_file, 'w', encoding='utf-8') as f:
-                f.write('')
+                f.write(debug_info)
             return '<div class="log-entry log-info">日志文件已创建，等待日志输出...</div>'
             
         # 读取日志文件
         with open(log_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()[-1000:] if f.readable() else []
-            if not lines:  # 如果没有日志
-                return '<div class="log-entry log-info">暂无日志记录</div>'
-            formatted_lines = [format_log_line(line) for line in lines]
-            return ''.join(formatted_lines)
+            try:
+                lines = f.readlines()
+                if not lines:
+                    # 如果文件为空，写入一些初始信息
+                    with open(log_file, 'a', encoding='utf-8') as f:
+                        f.write(debug_info)
+                    return '<div class="log-entry log-info">日志文件为空，已添加初始信息</div>'
+                
+                # 只保留最后1000行
+                lines = lines[-1000:]
+                formatted_lines = [format_log_line(line) for line in lines]
+                return ''.join(formatted_lines)
+            except Exception as read_error:
+                return f'<div class="log-entry log-error">读取日志文件时出错: {str(read_error)}</div>'
     except Exception as e:
-        return f'<div class="log-entry log-error">无法读取日志文件: {str(e)}</div>'
+        return f'<div class="log-entry log-error">处理日志文件时出错: {str(e)}</div>'
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8001) 

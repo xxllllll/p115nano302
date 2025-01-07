@@ -41,7 +41,7 @@ touch /app/logs/p115nano302.log\n\
 chmod 777 /app/logs\n\
 chmod 666 /app/logs/p115nano302.log\n\
 python /app/log_viewer.py &\n\
-p115nano302 2>&1 | tee -a /app/logs/p115nano302.log\n' > /app/start.sh
+p115nano302 "$@" 2>&1 | tee -a /app/logs/p115nano302.log\n' > /app/start.sh
 
 # 复制应用文件
 COPY log_viewer.py /app/
@@ -56,5 +56,8 @@ ENV HOST=0.0.0.0 \
 # 暴露端口
 EXPOSE 8000 8001
 
-# 直接使用 sh 执行启动脚本
-CMD ["/bin/sh", "/app/start.sh"]
+# 使用 ENTRYPOINT 来设置基础命令
+ENTRYPOINT ["/bin/sh", "/app/start.sh"]
+
+# 设置默认参数
+CMD []
